@@ -122,6 +122,9 @@ impl Command {
             // 3) Download chain tip metadata from lightwalletd
             // 4) Notify the wallet of the updated chain tip.
             let _chain_tip = update_chain_tip(client, db_data).await?;
+            let wallet_birthday = db_data
+                .get_wallet_birthday()?
+                .unwrap_or_else(|| BlockHeight::from(0));
             #[cfg(feature = "tui")]
             if let Some(handle) = tui_handle {
                 handle.set_wallet_summary(db_data.get_wallet_summary(10)?);
@@ -133,9 +136,9 @@ impl Command {
                 info!(
                     "Refreshing UTXOs for {:?} from height {}",
                     account_id,
-                    BlockHeight::from(0),
+                    wallet_birthday,
                 );
-                refresh_utxos(params, client, db_data, account_id, BlockHeight::from(0)).await?;
+                refresh_utxos(params, client, db_data, account_id, wallet_birthday).await?;
             }
 
             // 5) Get the suggested scan ranges from the wallet database
