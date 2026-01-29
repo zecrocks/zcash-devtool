@@ -1,4 +1,11 @@
-use std::{borrow::Cow, fmt, future::Future, net::{IpAddr, SocketAddr}, path::Path, time::Duration};
+use std::{
+    borrow::Cow,
+    fmt,
+    future::Future,
+    net::{IpAddr, SocketAddr},
+    path::Path,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use clap::Args;
@@ -129,7 +136,8 @@ impl Server<'_> {
 
     fn is_localhost(&self) -> bool {
         self.host.as_ref() == "localhost"
-            || self.host
+            || self
+                .host
                 .parse::<IpAddr>()
                 .map(|ip| ip.is_loopback())
                 .unwrap_or(false)
@@ -190,7 +198,7 @@ impl Server<'_> {
     where
         F: Future<Output = anyhow::Result<tor::Client>>,
     {
-        if self.use_tls() {
+        if self.use_tls() || self.is_onion() {
             self.connect_over_tor(&tor().await?).await
         } else {
             self.connect_direct().await
