@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt, future::Future, net::SocketAddr, path::Path, time::Duration};
+use std::{borrow::Cow, fmt, future::Future, net::{IpAddr, SocketAddr}, path::Path, time::Duration};
 
 use anyhow::anyhow;
 use clap::Args;
@@ -123,10 +123,21 @@ impl Server<'_> {
         }
     }
 
+    fn is_onion(&self) -> bool {
+        self.host.ends_with(".onion")
+    }
+
+    fn is_localhost(&self) -> bool {
+        self.host.as_ref() == "localhost"
+            || self.host
+                .parse::<IpAddr>()
+                .map(|ip| ip.is_loopback())
+                .unwrap_or(false)
+    }
+
     fn use_tls(&self) -> bool {
         // localhost never has a cert, .onion uses Tor's encryption, remotes need TLS
-        !matches!(self.host.as_ref(), "localhost" | "127.0.0.1" | "::1")
-            && !self.host.ends_with(".onion")
+        !self.is_localhost() && !self.is_onion()
     }
 
     fn endpoint(&self) -> String {
@@ -160,7 +171,7 @@ impl Server<'_> {
         &self,
         tor: &tor::Client,
     ) -> Result<CompactTxStreamerClient<Channel>, anyhow::Error> {
-        if !self.use_tls() {
+        if self.is_localhost() {
             return Err(anyhow!(
                 "Cannot connect to local lightwalletd server over Tor"
             ));
