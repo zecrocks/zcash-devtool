@@ -19,9 +19,9 @@ use crate::config::WalletConfig;
 // Options accepted for the `pczt update-with-derivation` command
 #[derive(Debug, Args)]
 pub(crate) struct Command {
-    /// The age identity file to decrypt the mnemonic phrase with.
+    /// The age identity file to decrypt the mnemonic phrase with (unencrypted wallets only).
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 
     /// The pool to derive within.
     #[arg(value_parser = parse_pool_type)]
@@ -37,6 +37,7 @@ impl Command {
 
         let mut config = WalletConfig::read(wallet_dir.as_ref())?;
         let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
         let mut buf = vec![];
         stdin().read_to_end(&mut buf).await?;
@@ -44,9 +45,8 @@ impl Command {
         let pczt = Pczt::parse(&buf).map_err(|e| anyhow!("Failed to read PCZT: {:?}", e))?;
 
         // Decrypt the mnemonic to access the seed.
-        let identities = age::IdentityFile::from_file(self.identity)?.into_identities()?;
         let seed = config
-            .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
+            .decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())?
             .ok_or(anyhow!(
                 "Seed must be present to enable updating a PCZT with a derivation path"
             ))?;

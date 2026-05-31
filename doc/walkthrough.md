@@ -102,6 +102,52 @@ network = "test"
 birthday = 3274265
 ```
 
+### Password-encrypted wallets (optional)
+
+The setup above encrypts the mnemonic to the `dev-key.txt` identity file, but leaves
+`data.sqlite` (which contains your accounts and full transaction history) unencrypted on
+disk. If you would instead like to protect the whole wallet with a password, pass
+`--encrypt-data` at initialization and omit `-i`:
+
+```bash
+λ cargo run --release --all-features -- wallet -w ../dev-wallet init --name "ZDevTest" \
+  --encrypt-data -n test -s zecrocks
+Enter a new wallet password:
+Confirm the new wallet password:
+```
+
+This encrypts `data.sqlite` with [SQLCipher](https://www.zetetic.net/sqlcipher/) and encrypts
+the mnemonic seed to the same password (so no `dev-key.txt` is created). The public block cache
+(`blockmeta.sqlite` and `blocks/`) is intentionally left unencrypted. `keys.toml` records that
+the wallet is encrypted:
+
+```bash
+λ cat ../dev-wallet/keys.toml
+mnemonic = """
+-----BEGIN AGE ENCRYPTED FILE-----
+<...>
+-----END AGE ENCRYPTED FILE-----
+"""
+network = "test"
+birthday = 3274265
+encrypted = true
+```
+
+Every subsequent command that opens the wallet or needs the seed will prompt for the password
+(and no `-i` is required):
+
+```bash
+λ cargo run --release --all-features -- wallet -w ../dev-wallet balance
+Enter wallet password:
+```
+
+To avoid the interactive prompt when scripting, set the `ZCASH_WALLET_PASSWORD` environment
+variable (this exposes the password to the process environment, so use it with care):
+
+```bash
+λ ZCASH_WALLET_PASSWORD=hunter2 cargo run --release --all-features -- wallet -w ../dev-wallet sync
+```
+
 Receiving Payments
 ------------------
 

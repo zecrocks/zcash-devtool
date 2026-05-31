@@ -2,11 +2,10 @@ use anyhow::anyhow;
 use clap::Args;
 use uuid::Uuid;
 use zcash_client_backend::data_api::{Account as _, InputSource, WalletRead};
-use zcash_client_sqlite::WalletDb;
 use zcash_protocol::ShieldedProtocol;
 
 use crate::{
-    commands::select_account, config::get_wallet_network, data::get_db_paths, error, ui::format_zec,
+    commands::select_account, config::WalletConfig, data::open_wallet_db, error, ui::format_zec,
 };
 
 // Options accepted for the `list-unspent` command
@@ -18,10 +17,11 @@ pub(crate) struct Command {
 
 impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
-        let params = get_wallet_network(wallet_dir.as_ref())?;
+        let config = WalletConfig::read(wallet_dir.as_ref())?;
+        let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let (_, db_data) = get_db_paths(wallet_dir);
-        let db_data = WalletDb::for_path(db_data, params, (), ())?;
+        let db_data = open_wallet_db(wallet_dir.as_ref(), params, (), (), passphrase.as_ref())?;
         let account = select_account(&db_data, self.account_id)?;
 
         let chain_height = db_data

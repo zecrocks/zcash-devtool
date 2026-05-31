@@ -2,13 +2,13 @@ use clap::Args;
 use rand::rngs::OsRng;
 use uuid::Uuid;
 use zcash_client_backend::data_api::{Account, WalletWrite};
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 use zcash_keys::{address::Address, keys::UnifiedAddressRequest};
 
 use crate::{
     commands::{inspect::address::inspect, select_account},
-    config::get_wallet_network,
-    data::get_db_paths,
+    config::WalletConfig,
+    data::open_wallet_db,
 };
 
 #[cfg(feature = "qr")]
@@ -28,9 +28,11 @@ pub(crate) struct Command {
 
 impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> anyhow::Result<()> {
-        let params = get_wallet_network(wallet_dir.as_ref())?;
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-        let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        let config = WalletConfig::read(wallet_dir.as_ref())?;
+        let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
+        let mut db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
 
         let account = select_account(&db_data, self.account_id)?;
 

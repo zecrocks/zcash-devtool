@@ -24,7 +24,8 @@ use crate::config::WalletConfig;
 // Options accepted for the `pczt inspect` command
 #[derive(Debug, Args)]
 pub(crate) struct Command {
-    /// age identity file to decrypt the mnemonic phrase with (if a wallet is provided)
+    /// age identity file to decrypt the mnemonic phrase with (if an unencrypted wallet is
+    /// provided)
     #[arg(short, long)]
     identity: Option<String>,
 }
@@ -43,31 +44,31 @@ impl Command {
 
         let pczt = Pczt::parse(&buf).map_err(|e| anyhow!("Failed to read PCZT: {:?}", e))?;
 
+        // Decrypt the seed if a wallet is available and we have a way to unlock it (a wallet
+        // password for encrypted wallets, or an age identity file for unencrypted ones).
         let seed_fp = config
             .as_mut()
-            .zip(self.identity)
-            .map(|(config, identity)| {
-                // Decrypt the mnemonic to access the seed.
-                let identities = age::IdentityFile::from_file(identity)?.into_identities()?;
+            .map(|config| {
+                let passphrase = config.prompt_passphrase()?;
+                if passphrase.is_none() && self.identity.is_none() {
+                    // No way to access the seed; skip seed-derived annotations.
+                    return Ok(None);
+                }
 
                 let seed = config
-                    .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
+                    .decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())?
                     .ok_or(anyhow!(
-                        "Identity provided for a wallet that doesn't have a seed"
+                        "Identity or password provided for a wallet that doesn't have a seed"
                     ))?;
 
+                let coin_type =
+                    zip32::ChildIndex::hardened(config.network().network_type().coin_type());
                 SeedFingerprint::from_seed(seed.expose_secret())
                     .ok_or_else(|| anyhow!("Invalid seed length"))
-                    .map(|seed_fp| {
-                        (
-                            seed_fp,
-                            zip32::ChildIndex::hardened(
-                                config.network().network_type().coin_type(),
-                            ),
-                        )
-                    })
+                    .map(|seed_fp| Some((seed_fp, coin_type)))
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
 
         let mut transparent_inputs = vec![];
         let mut transparent_outputs = vec![];

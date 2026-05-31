@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail};
 use clap::Args;
-use rusqlite::{named_params, Connection};
+use rusqlite::named_params;
 use time::macros::format_description;
 use uuid::Uuid;
 
@@ -11,7 +11,11 @@ use zcash_protocol::{
     PoolType, TxId,
 };
 
-use crate::{data::get_db_paths, ui::format_zec};
+use crate::{
+    config::WalletConfig,
+    data::{get_db_paths, open_keyed_connection},
+    ui::format_zec,
+};
 
 // Options accepted for the `list-tx` command
 #[derive(Debug, Args)]
@@ -44,6 +48,8 @@ impl ListMode {
 
 impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> anyhow::Result<()> {
+        let config = WalletConfig::read(wallet_dir.as_ref())?;
+        let passphrase = config.prompt_passphrase()?;
         let (_, db_data) = get_db_paths(wallet_dir);
         let mode = self
             .mode
@@ -51,7 +57,7 @@ impl Command {
             .map_or(Ok(ListMode::Text), |s| ListMode::parse(s.as_str()))
             .map_err(|_| anyhow::Error::msg("Invalid printing mode"))?;
 
-        let conn = Connection::open(db_data)?;
+        let conn = open_keyed_connection(db_data, passphrase.as_ref())?;
         rusqlite::vtab::array::load_module(&conn)?;
 
         let mut stmt_txs = conn.prepare(

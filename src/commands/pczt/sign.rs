@@ -22,15 +22,16 @@ use crate::config::WalletConfig;
 // Options accepted for the `pczt sign` command
 #[derive(Debug, Args)]
 pub(crate) struct Command {
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 }
 
 impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
         let mut config = WalletConfig::read(wallet_dir.as_ref())?;
         let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
         let mut buf = vec![];
         stdin().read_to_end(&mut buf).await?;
@@ -38,10 +39,8 @@ impl Command {
         let pczt = Pczt::parse(&buf).map_err(|e| anyhow!("Failed to read PCZT: {:?}", e))?;
 
         // Decrypt the mnemonic to access the seed.
-        let identities = age::IdentityFile::from_file(self.identity)?.into_identities()?;
-
         let seed = config
-            .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
+            .decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())?
             .ok_or(anyhow!("Seed must be present to enable signing"))?;
         let seed_fp = SeedFingerprint::from_seed(seed.expose_secret())
             .ok_or_else(|| anyhow!("Invalid seed length"))?;

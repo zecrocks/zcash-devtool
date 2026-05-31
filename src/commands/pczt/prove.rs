@@ -22,7 +22,8 @@ pub(crate) struct Command {
     #[arg(value_parser = parse_hex)]
     sapling_proof_generation_key: Option<std::vec::Vec<u8>>,
 
-    /// age identity file to decrypt the mnemonic phrase with for deriving the Sapling proof generation key
+    /// age identity file to decrypt the mnemonic phrase with for deriving the Sapling proof
+    /// generation key (unencrypted wallets only)
     #[arg(short, long)]
     identity: Option<String>,
 }
@@ -95,8 +96,8 @@ impl Command {
                 }
             }
 
-            let pkg_source = match (self.sapling_proof_generation_key, self.identity) {
-                (Some(proof_generation_key), _) => {
+            let pkg_source = match self.sapling_proof_generation_key {
+                Some(proof_generation_key) => {
                     if proof_generation_key.len() == 64 {
                         Ok(PgkSource::Provided(sapling::keys::ProofGenerationKey {
                             ak: sapling::keys::SpendValidatingKey::temporary_zcash_from_bytes(
@@ -113,23 +114,27 @@ impl Command {
                         Err(anyhow!("Invalid Sapling proof generation key"))
                     }
                 }
-                (None, Some(identity)) => {
-                    // Try to load it from the wallet config.
+                None => {
+                    // Try to load it from the wallet config. This requires either a wallet
+                    // password (for encrypted wallets) or an age identity file.
                     let mut config = WalletConfig::read(wallet_dir.as_ref())?;
+                    let passphrase = config.prompt_passphrase()?;
 
-                    // Decrypt the mnemonic to access the seed.
-                    let identities = age::IdentityFile::from_file(identity)?.into_identities()?;
+                    if passphrase.is_none() && self.identity.is_none() {
+                        Err(anyhow!(
+                            "Cannot create Sapling proofs without a proof generation key; \
+                             provide --sapling-proof-generation-key, or an identity file (-i) \
+                             for an unencrypted wallet"
+                        ))
+                    } else {
+                        // Cache the seed fingerprint for matching.
+                        let seed = config
+                            .decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())?
+                            .ok_or(anyhow!("Seed must be present to enable signing"))?;
 
-                    // Cache the seed fingerprint for matching.
-                    let seed = config
-                        .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
-                        .ok_or(anyhow!("Seed must be present to enable signing"))?;
-
-                    Ok(PgkSource::Wallet { config, seed })
+                        Ok(PgkSource::Wallet { config, seed })
+                    }
                 }
-                (None, None) => Err(anyhow!(
-                    "Cannot create Sapling proofs without a proof generation key"
-                )),
             }?;
 
             // Add Sapling proof generation key.

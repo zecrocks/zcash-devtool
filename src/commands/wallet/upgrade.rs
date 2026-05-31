@@ -1,34 +1,36 @@
-use anyhow::anyhow;
 use clap::Args;
 use rand::rngs::OsRng;
 use zcash_client_sqlite::{
     chain::init::init_blockmeta_db,
     util::SystemClock,
     wallet::init::{init_wallet_db, WalletMigrationError},
-    FsBlockDb, WalletDb,
+    FsBlockDb,
 };
 
 use crate::{
-    config::{get_wallet_network, get_wallet_seed},
-    data::get_db_paths,
+    config::WalletConfig,
+    data::{get_db_paths, open_wallet_db},
     error,
 };
 
 // Options accepted for the `upgrade` command
 #[derive(Debug, Args)]
 pub(crate) struct Command {
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
     identity: Option<String>,
 }
 
 impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
-        let params = get_wallet_network(wallet_dir.as_ref())?;
+        let mut config = WalletConfig::read(wallet_dir.as_ref())?;
+        let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let (fsblockdb_root, db_data) = get_db_paths(wallet_dir.as_ref());
+        let (fsblockdb_root, _) = get_db_paths(wallet_dir.as_ref());
         let mut db_cache = FsBlockDb::for_path(fsblockdb_root).map_err(error::Error::from)?;
-        let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        let mut db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
 
         init_blockmeta_db(&mut db_cache)?;
 
@@ -37,16 +39,8 @@ impl Command {
                 error, ..
             } if matches!(error, WalletMigrationError::SeedRequired))
             {
-                let identities = age::IdentityFile::from_file(
-                    self.identity
-                        .ok_or(anyhow!("Identity file required to decrypt mnemonic phrase"))?,
-                )?
-                .into_identities()?;
-
-                init_wallet_db(
-                    &mut db_data,
-                    get_wallet_seed(wallet_dir, identities.iter().map(|i| i.as_ref() as _))?,
-                )?;
+                let seed = config.decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())?;
+                init_wallet_db(&mut db_data, seed)?;
             } else {
                 return Err(e.into());
             }

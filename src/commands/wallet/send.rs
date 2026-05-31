@@ -1,7 +1,6 @@
 #![allow(deprecated)]
 use std::{num::NonZeroUsize, str::FromStr};
 
-use age::Identity;
 use anyhow::anyhow;
 use clap::Args;
 use rand::rngs::OsRng;
@@ -21,7 +20,7 @@ use zcash_client_backend::{
     proto::service,
     wallet::OvkPolicy,
 };
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 use zcash_keys::keys::UnifiedSpendingKey;
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::{
@@ -32,7 +31,7 @@ use zcash_protocol::{
 use zip321::{Payment, TransactionRequest};
 
 use crate::{
-    commands::select_account, config::WalletConfig, data::get_db_paths, error,
+    commands::select_account, config::WalletConfig, data::open_wallet_db, error,
     remote::ConnectionArgs,
 };
 
@@ -42,9 +41,9 @@ pub(crate) struct Command {
     /// The UUID of the account to send funds from
     account_id: Option<Uuid>,
 
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 
     /// The recipient's Unified, Sapling or transparent address
     #[arg(long)]
@@ -74,7 +73,9 @@ pub(crate) struct Command {
 
 pub(crate) trait PaymentContext {
     fn spending_account(&self) -> Option<Uuid>;
-    fn age_identities(&self) -> anyhow::Result<Vec<Box<dyn Identity>>>;
+    /// Path to the age identity file used to decrypt the seed for unencrypted (legacy)
+    /// wallets. Ignored for password-encrypted wallets, where the wallet password is used.
+    fn age_identity_file(&self) -> Option<&str>;
     fn connection_args(&self) -> &ConnectionArgs;
     fn target_note_count(&self) -> usize;
     fn min_split_output_value(&self) -> u64;
@@ -86,9 +87,8 @@ impl PaymentContext for Command {
         self.account_id
     }
 
-    fn age_identities(&self) -> anyhow::Result<Vec<Box<dyn Identity>>> {
-        let identities = age::IdentityFile::from_file(self.identity.clone())?.into_identities()?;
-        Ok(identities)
+    fn age_identity_file(&self) -> Option<&str> {
+        self.identity.as_deref()
     }
 
     fn connection_args(&self) -> &ConnectionArgs {
@@ -137,9 +137,10 @@ pub(crate) async fn pay<C: PaymentContext>(
 ) -> Result<(), anyhow::Error> {
     let mut config = WalletConfig::read(wallet_dir.as_ref())?;
     let params = config.network();
+    let passphrase = config.prompt_passphrase()?;
 
-    let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-    let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+    let mut db_data =
+        open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
     let account = select_account(&db_data, context.spending_account())?;
     let derivation = account
         .source()
@@ -147,9 +148,8 @@ pub(crate) async fn pay<C: PaymentContext>(
         .ok_or(anyhow!("Cannot spend from view-only accounts"))?;
 
     // Decrypt the mnemonic to access the seed.
-    let identities = context.age_identities()?;
     let seed = config
-        .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
+        .decrypt_seed_with(passphrase.as_ref(), context.age_identity_file())?
         .ok_or(anyhow!("Seed must be present to enable sending"))?;
 
     let usk =

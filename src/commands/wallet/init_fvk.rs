@@ -10,7 +10,12 @@ use zcash_keys::{encoding::decode_extfvk_with_network, keys::UnifiedFullViewingK
 use zcash_protocol::consensus::{self, NetworkType};
 use zip32::fingerprint::SeedFingerprint;
 
-use crate::{config::WalletConfig, data::init_dbs, parse_hex, remote::ConnectionArgs};
+use crate::{
+    config::{prompt_new_passphrase, WalletConfig},
+    data::init_dbs,
+    parse_hex,
+    remote::ConnectionArgs,
+};
 
 // Options accepted for the `init-fvk` command
 #[derive(Debug, Args)]
@@ -22,6 +27,13 @@ pub(crate) struct Command {
     /// Serialized full viewing key (Unified or Sapling) to initialize the wallet with
     #[arg(long)]
     fvk: String,
+
+    /// Encrypt `data.sqlite` (via SQLCipher) with a wallet password.
+    ///
+    /// You will be prompted to set the password, and prompted again for it on each command
+    /// that opens the wallet. The public block cache is left unencrypted.
+    #[arg(long)]
+    encrypt_data: bool,
 
     /// The wallet's birthday (default is current chain height)
     #[arg(long)]
@@ -107,10 +119,22 @@ impl Command {
             _ => Err(anyhow!("Need either both (for spending) or neither (for view-only) of seed_fingerprint and hd_account_index")),
         }?;
 
-        // Save the wallet config to disk.
-        WalletConfig::init_without_mnemonic(wallet_dir.as_ref(), birthday.height(), network)?;
+        // If requested, set a wallet password to encrypt `data.sqlite`.
+        let passphrase = if opts.encrypt_data {
+            Some(prompt_new_passphrase()?)
+        } else {
+            None
+        };
 
-        let mut wallet_db = init_dbs(network, wallet_dir.as_ref())?;
+        // Save the wallet config to disk.
+        WalletConfig::init_without_mnemonic(
+            wallet_dir.as_ref(),
+            birthday.height(),
+            network,
+            opts.encrypt_data,
+        )?;
+
+        let mut wallet_db = init_dbs(network, wallet_dir.as_ref(), passphrase.as_ref())?;
         wallet_db.import_account_ufvk(&opts.name, &ufvk, &birthday, purpose, None)?;
 
         Ok(())

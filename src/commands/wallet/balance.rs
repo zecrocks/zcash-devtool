@@ -8,13 +8,12 @@ use zcash_client_backend::{
     data_api::{wallet::ConfirmationsPolicy, Account as _, WalletRead},
     tor,
 };
-use zcash_client_sqlite::WalletDb;
 use zcash_keys::keys::UnifiedAddressRequest;
 use zcash_protocol::value::{Zatoshis, COIN};
 
 use crate::{
-    commands::select_account, config::get_wallet_network, data::get_db_paths, error,
-    parse_currency, remote::tor_client, ui::format_zec,
+    commands::select_account, config::WalletConfig, data::open_wallet_db, error, parse_currency,
+    remote::tor_client, ui::format_zec,
 };
 
 // Options accepted for the `balance` command
@@ -31,10 +30,11 @@ pub(crate) struct Command {
 
 impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
-        let params = get_wallet_network(wallet_dir.as_ref())?;
+        let config = WalletConfig::read(wallet_dir.as_ref())?;
+        let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-        let db_data = WalletDb::for_path(db_data, params, (), ())?;
+        let db_data = open_wallet_db(wallet_dir.as_ref(), params, (), (), passphrase.as_ref())?;
         let account = select_account(&db_data, self.account_id)?;
 
         let address = db_data

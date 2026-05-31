@@ -28,8 +28,8 @@ use zcash_protocol::{
 };
 
 use crate::{
-    config::get_wallet_network,
-    data::get_db_paths,
+    config::WalletConfig,
+    data::open_wallet_db,
     tui::{self, Tui},
     ShutdownListener,
 };
@@ -83,9 +83,10 @@ impl Command {
         wallet_dir: Option<String>,
         tui: Tui,
     ) -> anyhow::Result<()> {
-        let params = get_wallet_network(wallet_dir.as_ref())?;
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-        let db_data = WalletDb::for_path(db_data, params, (), ())?;
+        let config = WalletConfig::read(wallet_dir.as_ref())?;
+        let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
+        let db_data = open_wallet_db(wallet_dir.as_ref(), params, (), (), passphrase.as_ref())?;
 
         let mut app = App::new(
             shutdown.tui_quit_signal(),

@@ -8,16 +8,26 @@ use clap::Args;
 use zcash_protocol::consensus::{self, Parameters};
 
 use crate::{
-    config::WalletConfig,
+    config::{prompt_new_passphrase, scrypt_recipient, WalletConfig},
     data::{init_dbs, Network},
 };
 
 // Options accepted for the `zip48 init` command
 #[derive(Debug, Args)]
 pub(crate) struct Command {
-    /// age identity file to encrypt the mnemonic phrase to (generated if it doesn't exist)
+    /// age identity file to encrypt the mnemonic phrase to (generated if it doesn't exist).
+    ///
+    /// Required unless `--encrypt-data` is set, in which case the wallet is protected by a
+    /// password instead and no identity file is used.
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
+
+    /// Encrypt `data.sqlite` (via SQLCipher) and the seed with a wallet password.
+    ///
+    /// You will be prompted to set the password, and prompted again for it on each command
+    /// that opens the wallet. The public block cache is left unencrypted.
+    #[arg(long)]
+    encrypt_data: bool,
 
     /// Initialise the wallet with a new mnemonic phrase (default is to ask for a phrase)
     #[arg(long, required = false)]
@@ -33,27 +43,46 @@ impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
         let params = consensus::Network::from(self.network);
 
-        let recipients = if fs::exists(&self.identity)? {
-            age::IdentityFile::from_file(self.identity)?.to_recipients()?
+        // Determine how the seed will be encrypted: either to a wallet password (via an age
+        // scrypt passphrase recipient) or to an age identity file.
+        let passphrase = if self.encrypt_data {
+            Some(prompt_new_passphrase()?)
         } else {
-            eprintln!("Generating a new age identity to encrypt the mnemonic phrase");
-            let identity = age::x25519::Identity::generate();
-            let recipient = identity.to_public();
+            None
+        };
 
-            // Write it to the provided path so we have it for next time.
-            let mut f = fs::File::create_new(self.identity)?;
-            f.write_all(
-                format!(
-                    "# created: {}\n",
-                    chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-                )
-                .as_bytes(),
-            )?;
-            f.write_all(format!("# public key: {recipient}\n").as_bytes())?;
-            f.write_all(format!("{}\n", identity.to_string().expose_secret()).as_bytes())?;
-            f.flush()?;
+        let recipients: Vec<Box<dyn age::Recipient + Send>> = if let Some(passphrase) = &passphrase {
+            vec![Box::new(scrypt_recipient(passphrase))]
+        } else {
+            let identity = self.identity.clone().ok_or_else(|| {
+                anyhow::anyhow!("An age identity file (-i) is required unless --encrypt-data is set")
+            })?;
+            if fs::exists(&identity)? {
+                age::IdentityFile::from_file(identity)?
+                    .to_recipients()?
+                    .into_iter()
+                    .map(|r| r as _)
+                    .collect()
+            } else {
+                eprintln!("Generating a new age identity to encrypt the mnemonic phrase");
+                let id = age::x25519::Identity::generate();
+                let recipient = id.to_public();
 
-            vec![Box::new(recipient) as _]
+                // Write it to the provided path so we have it for next time.
+                let mut f = fs::File::create_new(identity)?;
+                f.write_all(
+                    format!(
+                        "# created: {}\n",
+                        chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+                    )
+                    .as_bytes(),
+                )?;
+                f.write_all(format!("# public key: {recipient}\n").as_bytes())?;
+                f.write_all(format!("{}\n", id.to_string().expose_secret()).as_bytes())?;
+                f.flush()?;
+
+                vec![Box::new(recipient) as _]
+            }
         };
 
         // Parse or create the wallet's mnemonic phrase.
@@ -78,10 +107,11 @@ impl Command {
                 .activation_height(consensus::NetworkUpgrade::Nu6)
                 .expect("active"),
             self.network.into(),
+            self.encrypt_data,
         )?;
 
         // Initialise the block and wallet DBs.
-        let _ = init_dbs(params, wallet_dir.as_ref())?;
+        let _ = init_dbs(params, wallet_dir.as_ref(), passphrase.as_ref())?;
 
         Ok(())
     }

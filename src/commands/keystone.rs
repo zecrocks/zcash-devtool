@@ -8,9 +8,9 @@ use rand::rngs::OsRng;
 use tokio::io::{stdout, AsyncWriteExt};
 use uuid::Uuid;
 use zcash_client_backend::data_api::Account;
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 
-use crate::{config::WalletConfig, data::get_db_paths, ShutdownListener};
+use crate::{config::WalletConfig, data::open_wallet_db, ShutdownListener};
 
 use super::select_account;
 
@@ -43,9 +43,10 @@ impl Enroll {
     ) -> Result<(), anyhow::Error> {
         let config = WalletConfig::read(wallet_dir.as_ref())?;
         let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-        let db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        let db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
         let account = select_account(&db_data, self.account_id)?;
 
         let key_derivation = account

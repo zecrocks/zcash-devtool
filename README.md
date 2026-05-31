@@ -15,6 +15,25 @@ This app has not been written with security in mind. It does however have afford
 such as encryption of the mnemonic seed phrases that should make it viable for small
 scale experimentation, at your own risk.
 
+### Wallet encryption
+
+By default, the mnemonic seed phrase is encrypted to an [age](https://age-encryption.org/)
+identity file (the `-i` parameter), but the wallet database (`data.sqlite`), which contains
+your accounts, addresses, notes, and full transaction history, is stored **unencrypted**.
+
+Passing `--encrypt-data` at `init` instead protects the wallet with a **password**:
+
+- `data.sqlite` is encrypted with [SQLCipher](https://www.zetetic.net/sqlcipher/) (AES-256),
+  keyed from the password via PBKDF2.
+- The mnemonic seed is encrypted to the same password (no identity file is used or needed).
+- The public block cache (`blockmeta.sqlite` and the `blocks/` directory) is left
+  unencrypted, as it contains only public chain data.
+
+You will be prompted for the password on each command that needs to open the wallet or use
+the seed. For scripting, the password may be supplied via the `ZCASH_WALLET_PASSWORD`
+environment variable (note that this exposes it to the process environment). Wallets created
+without `--encrypt-data` continue to behave exactly as before.
+
 ## Usage
 
 No binary artifacts are provided for this crate; it is generally used via
@@ -36,6 +55,14 @@ cargo run --release -- wallet -w <wallet_dir> sync
 ```
 
 Note: The `-i` (identity) parameter specifies an age identity file for encrypting the mnemonic phrase. The file will be generated if it doesn't exist.
+
+Alternatively, to create a password-encrypted wallet (encrypting both `data.sqlite` and the
+seed; no identity file needed):
+```
+cargo run --release -- wallet -w <wallet_dir> init --name "<account_name>" --encrypt-data -n test
+cargo run --release -- wallet -w <wallet_dir> sync
+```
+You will be prompted to set a password, and prompted for it again on subsequent commands.
 
 See the help docs for `init` for additional information, including for how to
 initialize a mainnet wallet. Initializing a mainnet wallet will require

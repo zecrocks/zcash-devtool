@@ -15,12 +15,12 @@ use zcash_client_backend::{
         self, compact_tx_streamer_client::CompactTxStreamerClient, BlockRange, RawTransaction,
     },
 };
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 use zcash_keys::encoding::AddressCodec;
 use zcash_primitives::transaction::{Transaction, TxId};
 use zcash_protocol::consensus::{BlockHeight, BranchId, Network};
 
-use crate::{config::get_wallet_network, data::get_db_paths, remote::ConnectionArgs};
+use crate::{config::WalletConfig, data::open_wallet_db, remote::ConnectionArgs};
 
 // Options accepted for the `enhance` command
 #[derive(Debug, Args)]
@@ -75,10 +75,12 @@ async fn fetch_transaction(
 
 impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
-        let params = get_wallet_network(wallet_dir.as_ref())?;
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
+        let config = WalletConfig::read(wallet_dir.as_ref())?;
+        let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        let mut db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
         let chain_tip = db_data.chain_height()?.ok_or_else(|| {
             anyhow!("Chain height must be available to perform transaction enhancement.")
         })?;

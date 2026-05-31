@@ -5,20 +5,20 @@ use zcash_client_backend::{
     data_api::{Account, WalletRead},
     proto::service,
 };
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 
 use crate::{
     config::WalletConfig,
-    data::{erase_wallet_state, get_db_paths},
+    data::{erase_wallet_state, open_wallet_db},
     remote::ConnectionArgs,
 };
 
 // Options accepted for the `reset` command
 #[derive(Debug, Args)]
 pub(crate) struct Command {
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 
     #[command(flatten)]
     connection: ConnectionArgs,
@@ -29,6 +29,7 @@ impl Command {
         // Load the wallet network, seed, and birthday from disk.
         let mut config = WalletConfig::read(wallet_dir.as_ref())?;
         let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
         // Connect to the client (for re-initializing the wallet).
         let mut client = self.connection.connect(params, wallet_dir.as_ref()).await?;
@@ -44,8 +45,13 @@ impl Command {
 
         // Get the account name and key source to preserve them.
         let (account_name, key_source) = {
-            let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-            let db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+            let db_data = open_wallet_db(
+                wallet_dir.as_ref(),
+                params,
+                SystemClock,
+                OsRng,
+                passphrase.as_ref(),
+            )?;
 
             let account_id = *db_data
                 .get_account_ids()?
@@ -67,10 +73,8 @@ impl Command {
         erase_wallet_state(wallet_dir.as_ref()).await;
 
         // Decrypt the mnemonic to access the seed.
-        let identities = age::IdentityFile::from_file(self.identity)?.into_identities()?;
-
         let seed = config
-            .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
+            .decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())?
             .ok_or(anyhow!("Seed is required for database reset"))?;
 
         // Re-initialize the wallet state.
@@ -81,6 +85,7 @@ impl Command {
             &seed,
             birthday,
             key_source.as_deref(),
+            passphrase.as_ref(),
         )
     }
 }

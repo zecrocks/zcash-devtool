@@ -23,15 +23,16 @@ pub(crate) struct Command {
     #[clap(long)]
     required: u8,
 
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 }
 
 impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> anyhow::Result<()> {
         let mut config = WalletConfig::read(wallet_dir.as_ref())?;
         let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
         let key_info_vector = fs::read_to_string(&self.key_info)?;
         let key_info_vector = || key_info_vector.lines().filter(|line| !line.is_empty());
@@ -57,9 +58,8 @@ impl Command {
         println!();
 
         // Decrypt the mnemonic to access the seed.
-        let identities = age::IdentityFile::from_file(self.identity)?.into_identities()?;
         let seed = config
-            .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))
+            .decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())
             .context("Failed to decrypt wallet seed phrase")?
             .ok_or(anyhow!(
                 "Seed must be present to enable generating a new account"

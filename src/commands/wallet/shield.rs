@@ -20,13 +20,13 @@ use zcash_client_backend::{
     proto::service,
     wallet::OvkPolicy,
 };
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 use zcash_keys::{encoding::AddressCodec, keys::UnifiedSpendingKey};
 use zcash_proofs::prover::LocalTxProver;
 use zcash_protocol::{value::Zatoshis, ShieldedProtocol};
 
 use crate::{
-    commands::select_account, config::WalletConfig, data::get_db_paths, error,
+    commands::select_account, config::WalletConfig, data::open_wallet_db, error,
     remote::ConnectionArgs,
 };
 
@@ -40,9 +40,9 @@ pub(crate) struct Command {
     #[arg(short, long, action = clap::ArgAction::Append)]
     address: Vec<String>,
 
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 
     #[command(flatten)]
     connection: ConnectionArgs,
@@ -62,9 +62,10 @@ impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
         let mut config = WalletConfig::read(wallet_dir.as_ref())?;
         let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-        let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        let mut db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
         let account = select_account(&db_data, self.account_id)?;
         let derivation = account.source().key_derivation().ok_or(anyhow!(
             "Cannot spend from view-only accounts; did you mean to use `pczt shield` instead?"
@@ -77,9 +78,8 @@ impl Command {
             .collect::<Result<HashSet<_>, _>>()?;
 
         // Decrypt the mnemonic to access the seed.
-        let identities = age::IdentityFile::from_file(self.identity)?.into_identities()?;
         let seed = config
-            .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
+            .decrypt_seed_with(passphrase.as_ref(), self.identity.as_deref())?
             .ok_or(anyhow!("Seed must be present to enable sending"))?;
 
         let usk = UnifiedSpendingKey::from_seed(

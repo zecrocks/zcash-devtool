@@ -7,10 +7,10 @@ use zcash_client_backend::{
     data_api::{wallet::extract_and_store_transaction_from_pczt, WalletRead},
     proto::service,
 };
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 use zcash_proofs::prover::LocalTxProver;
 
-use crate::{config::WalletConfig, data::get_db_paths, error, remote::ConnectionArgs};
+use crate::{config::WalletConfig, data::open_wallet_db, error, remote::ConnectionArgs};
 
 // Options accepted for the `pczt send` command
 #[derive(Debug, Args)]
@@ -23,9 +23,10 @@ impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
         let config = WalletConfig::read(wallet_dir.as_ref())?;
         let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-        let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        let mut db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
 
         let mut client = self.connection.connect(params, wallet_dir.as_ref()).await?;
 

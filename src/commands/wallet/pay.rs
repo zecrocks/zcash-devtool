@@ -1,6 +1,5 @@
 #![allow(deprecated)]
 
-use age::Identity;
 use clap::Args;
 use uuid::Uuid;
 
@@ -17,9 +16,9 @@ pub(crate) struct Command {
     /// The UUID of the account to send funds from
     account_id: Option<Uuid>,
 
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 
     /// The [`ZIP 321`] payment request describing the payment(s) to be constructed.
     ///
@@ -50,9 +49,8 @@ impl PaymentContext for Command {
         self.account_id
     }
 
-    fn age_identities(&self) -> anyhow::Result<Vec<Box<dyn Identity>>> {
-        let identities = age::IdentityFile::from_file(self.identity.clone())?.into_identities()?;
-        Ok(identities)
+    fn age_identity_file(&self) -> Option<&str> {
+        self.identity.as_deref()
     }
 
     fn connection_args(&self) -> &ConnectionArgs {

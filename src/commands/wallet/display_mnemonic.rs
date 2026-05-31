@@ -6,9 +6,9 @@ use secrecy::ExposeSecret;
 // Options accepted for the `display-mnemonic` command
 #[derive(Debug, Args)]
 pub(crate) struct Command {
-    /// age identity file to decrypt the mnemonic phrase with
+    /// age identity file to decrypt the mnemonic phrase with (unencrypted wallets only)
     #[arg(short, long)]
-    identity: String,
+    identity: Option<String>,
 
     /// allow the printing of the mnemonic to stdout; false by default
     #[arg(long, default_value = "false")]
@@ -18,11 +18,11 @@ pub(crate) struct Command {
 impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> anyhow::Result<()> {
         let mut config = WalletConfig::read(wallet_dir.as_ref())?;
-        let identities = age::IdentityFile::from_file(self.identity)?.into_identities()?;
+        let passphrase = config.prompt_passphrase()?;
 
         if self.enable {
             if let Some(mnemonic_bytes) =
-                config.decrypt_mnemonic(identities.iter().map(|i| i.as_ref() as _))?
+                config.decrypt_mnemonic_with(passphrase.as_ref(), self.identity.as_deref())?
             {
                 println!("{}", std::str::from_utf8(mnemonic_bytes.expose_secret())?);
             } else {

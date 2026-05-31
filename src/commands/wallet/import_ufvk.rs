@@ -7,12 +7,12 @@ use zcash_client_backend::{
     data_api::{AccountBirthday, AccountPurpose, WalletWrite, Zip32Derivation},
     proto::service,
 };
-use zcash_client_sqlite::{util::SystemClock, WalletDb};
+use zcash_client_sqlite::util::SystemClock;
 use zcash_keys::keys::UnifiedFullViewingKey;
 use zcash_protocol::consensus;
 use zip32::fingerprint::SeedFingerprint;
 
-use crate::{data::get_db_paths, error, parse_hex, remote::ConnectionArgs};
+use crate::{config::WalletConfig, data::open_wallet_db, error, parse_hex, remote::ConnectionArgs};
 
 // Options accepted for the `import-ufvk` command
 #[derive(Debug, Args)]
@@ -53,8 +53,10 @@ impl Command {
             }
         }?;
 
-        let (_, db_data) = get_db_paths(wallet_dir.as_ref());
-        let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        // Prompt for the wallet password if the existing wallet is encrypted.
+        let passphrase = WalletConfig::read(wallet_dir.as_ref())?.prompt_passphrase()?;
+        let mut db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
 
         // Construct an `AccountBirthday` for the account's birthday.
         let birthday = {

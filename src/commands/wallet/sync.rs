@@ -28,8 +28,8 @@ use zcash_primitives::merkle_tree::HashSer;
 use zcash_protocol::consensus::{BlockHeight, Parameters};
 
 use crate::{
-    config::get_wallet_network,
-    data::{get_block_path, get_db_paths},
+    config::WalletConfig,
+    data::{get_block_path, get_db_paths, open_wallet_db},
     error,
     remote::ConnectionArgs,
     ShutdownListener,
@@ -80,12 +80,15 @@ impl Command {
         wallet_dir: Option<String>,
         #[cfg(feature = "tui")] tui: Tui,
     ) -> Result<(), anyhow::Error> {
-        let params = get_wallet_network(wallet_dir.as_ref())?;
+        let config = WalletConfig::read(wallet_dir.as_ref())?;
+        let params = config.network();
+        let passphrase = config.prompt_passphrase()?;
 
-        let (fsblockdb_root, db_data) = get_db_paths(wallet_dir.as_ref());
+        let (fsblockdb_root, _) = get_db_paths(wallet_dir.as_ref());
         let fsblockdb_root = fsblockdb_root.as_path();
         let mut db_cache = FsBlockDb::for_path(fsblockdb_root).map_err(error::Error::from)?;
-        let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;
+        let mut db_data =
+            open_wallet_db(wallet_dir.as_ref(), params, SystemClock, OsRng, passphrase.as_ref())?;
         let mut client = self.connection.connect(params, wallet_dir.as_ref()).await?;
 
         #[cfg(feature = "tui")]
