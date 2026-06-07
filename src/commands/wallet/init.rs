@@ -9,7 +9,7 @@ use zcash_client_backend::{
     data_api::{AccountBirthday, WalletWrite},
     proto::service::{self, compact_tx_streamer_client::CompactTxStreamerClient},
 };
-use zcash_protocol::consensus::{self, BlockHeight, Parameters};
+use zcash_protocol::consensus::{BlockHeight, Parameters};
 
 use crate::{
     config::WalletConfig,
@@ -45,7 +45,7 @@ pub(crate) struct Command {
 impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
         let opts = self;
-        let params = consensus::Network::from(opts.network);
+        let params = opts.network;
 
         let mut client = opts.connection.connect(params, wallet_dir.as_ref()).await?;
 

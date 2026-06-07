@@ -31,7 +31,7 @@ pub(crate) struct Command {
 
 impl Command {
     pub(crate) fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
-        let params = consensus::Network::from(self.network);
+        let params = self.network;
 
         let recipients = if fs::exists(&self.identity)? {
             age::IdentityFile::from_file(self.identity)?.to_recipients()?
