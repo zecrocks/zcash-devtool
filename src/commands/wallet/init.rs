@@ -33,10 +33,16 @@ pub(crate) struct Command {
     #[arg(long)]
     birthday: Option<u32>,
 
-    /// The network the wallet will be used with: \"test\" or \"main\" (default is \"test\")
+    /// The network the wallet will be used with: \"test\", \"main\" or \"regtest\" (default is \"test\")
     #[arg(short, long)]
     #[arg(value_parser = Network::parse)]
     network: Network,
+
+    /// The mnemonic phrase to initialise the wallet with. If omitted, you are prompted
+    /// interactively (press Enter at the prompt to generate a fresh phrase). Provided primarily so
+    /// the wallet can be driven non-interactively, e.g. as the funding wallet in regtest tests.
+    #[arg(long)]
+    mnemonic: Option<String>,
 
     #[command(flatten)]
     connection: ConnectionArgs,
@@ -84,10 +90,14 @@ impl Command {
             vec![Box::new(recipient) as _]
         };
 
-        // Parse or create the wallet's mnemonic phrase.
-        let phrase = SecretString::new(rpassword::prompt_password(
-            "Enter mnemonic (or just press Enter to generate a new one):",
-        )?);
+        // Parse or create the wallet's mnemonic phrase. A `--mnemonic` argument allows
+        // non-interactive use (e.g. automated regtest funding); otherwise prompt.
+        let phrase = match opts.mnemonic {
+            Some(mnemonic) => SecretString::new(mnemonic),
+            None => SecretString::new(rpassword::prompt_password(
+                "Enter mnemonic (or just press Enter to generate a new one):",
+            )?),
+        };
         let (mnemonic, recover_until) = if !phrase.expose_secret().is_empty() {
             (
                 <Mnemonic<English>>::from_phrase(phrase.expose_secret())?,
