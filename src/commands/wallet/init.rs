@@ -122,7 +122,7 @@ impl Command {
             recipients.iter().map(|r| r.as_ref() as _),
             &mnemonic,
             birthday.height(),
-            opts.network.into(),
+            opts.network,
         )?;
 
         let seed = {

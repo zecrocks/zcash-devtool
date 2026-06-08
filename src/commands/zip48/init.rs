@@ -77,7 +77,7 @@ impl Command {
             params
                 .activation_height(consensus::NetworkUpgrade::Nu6)
                 .expect("active"),
-            self.network.into(),
+            self.network,
         )?;
 
         // Initialise the block and wallet DBs.
