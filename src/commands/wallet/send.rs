@@ -123,7 +123,7 @@ impl Command {
             None,
             vec![],
         )
-        .ok_or_else(|| error::Error::TransparentMemo(0))?;
+        .map_err(|_| error::Error::TransparentMemo(0))?;
         let request = TransactionRequest::new(vec![payment]).map_err(error::Error::from)?;
 
         pay(wallet_dir, self, request).await
@@ -185,6 +185,7 @@ pub(crate) async fn pay<C: PaymentContext>(
         &change_strategy,
         request,
         ConfirmationsPolicy::default(),
+        None,
     )
     .map_err(error::Error::from)?;
 
@@ -206,6 +207,7 @@ pub(crate) async fn pay<C: PaymentContext>(
             &SpendingKeys::from_unified_spending_key(usk),
             OvkPolicy::Sender,
             &proposal,
+            None,
         )
         .map_err(error::Error::from)?;
 

@@ -93,10 +93,9 @@ fn regtest_local() -> LocalNetwork {
         canopy: h,
         nu5: h,
         nu6: h,
-        // NU6 ceiling for now: activating NU6.1 makes zebra's z_gettreestate fail ("block not in
-        // the main chain") with lightwalletd v0.4.19. Must match zecd + the regtest harness.
-        // Real NU6.1/NU6.2 support needs a librustzcash bump.
-        nu6_1: None,
+        // Activate the full NU6.x line from genesis. Must match zecd + the regtest harness.
+        nu6_1: h,
+        nu6_2: h,
         #[cfg(zcash_unstable = "nu7")]
         nu7: h,
         #[cfg(zcash_unstable = "zfuture")]
