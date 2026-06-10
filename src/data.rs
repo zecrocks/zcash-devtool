@@ -85,6 +85,11 @@ impl From<NetworkType> for Network {
 #[allow(unexpected_cfgs)]
 fn regtest_local() -> LocalNetwork {
     let h = Some(BlockHeight::from_u32(1));
+    // NU6.1/NU6.2 activate a few blocks in, not at genesis: NU6.1's activation block requires
+    // ZIP-271 lockbox disbursements out of the deferred pool, which only accrues once NU6 is live.
+    // Must match zecd's network::regtest and the regtest harness (its NU6_2_ACTIVATION_HEIGHT) so
+    // the funder commits its transactions to the same consensus branch id.
+    let nu62 = Some(BlockHeight::from_u32(4));
     LocalNetwork {
         overwinter: h,
         sapling: h,
@@ -93,13 +98,12 @@ fn regtest_local() -> LocalNetwork {
         canopy: h,
         nu5: h,
         nu6: h,
-        // Activate the full NU6.x line from genesis. Must match zecd + the regtest harness.
-        nu6_1: h,
-        nu6_2: h,
+        nu6_1: nu62,
+        nu6_2: nu62,
         #[cfg(zcash_unstable = "nu7")]
-        nu7: h,
+        nu7: nu62,
         #[cfg(zcash_unstable = "zfuture")]
-        z_future: h,
+        z_future: nu62,
     }
 }
 
@@ -167,8 +171,8 @@ mod tests {
         let net = Network::parse("regtest").expect("regtest is a known network");
         assert_eq!(net.name(), "regtest");
         assert_eq!(net.network_type(), NetworkType::Regtest);
-        // Every upgrade, including NU5 (Orchard), is active from height 1, matching zecd's
-        // regtest configuration and the zebra/zcashd regtest convention.
+        // NU5 (Orchard) and the earlier upgrades are active from height 1 (NU6.1/NU6.2 activate a
+        // few blocks in — see regtest_local), matching zecd's regtest configuration.
         assert_eq!(
             net.activation_height(NetworkUpgrade::Nu5),
             Some(BlockHeight::from_u32(1))
