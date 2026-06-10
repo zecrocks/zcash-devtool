@@ -8,7 +8,10 @@ use zcash_client_sqlite::{FsBlockDb, WalletDb};
 use tracing::error;
 
 use zcash_client_sqlite::chain::BlockMeta;
-use zcash_protocol::consensus::{self, Parameters};
+use zcash_protocol::consensus::{
+    BlockHeight, NetworkType, NetworkUpgrade, Parameters, MAIN_NETWORK, TEST_NETWORK,
+};
+use zcash_protocol::local_consensus::LocalNetwork;
 
 use crate::error;
 
@@ -17,11 +20,17 @@ const BLOCKS_FOLDER: &str = "blocks";
 const DATA_DB: &str = "data.sqlite";
 const TOR_DIR: &str = "tor";
 
+/// The network a devtool wallet operates on. Implements [`Parameters`] directly so it threads
+/// through the whole librustzcash wallet stack (DB, key derivation, address encoding, transaction
+/// building) as the single `P` value — including `Regtest`, which librustzcash's own
+/// [`consensus::Network`](zcash_protocol::consensus::Network) (main/test only) cannot represent.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) enum Network {
     #[default]
     Test,
     Main,
+    /// A local regtest chain; activation heights are carried by the inner [`LocalNetwork`].
+    Regtest(LocalNetwork),
 }
 
 impl Network {
@@ -29,6 +38,7 @@ impl Network {
         match name {
             "main" => Ok(Network::Main),
             "test" => Ok(Network::Test),
+            "regtest" => Ok(Network::Regtest(regtest_local())),
             other => Err(format!("Unsupported network: {other}")),
         }
     }
@@ -37,25 +47,63 @@ impl Network {
         match self {
             Network::Test => "test",
             Network::Main => "main",
+            Network::Regtest(_) => "regtest",
         }
     }
 }
 
-impl From<Network> for consensus::Network {
-    fn from(value: Network) -> Self {
-        match value {
-            Network::Test => consensus::Network::TestNetwork,
-            Network::Main => consensus::Network::MainNetwork,
+impl Parameters for Network {
+    fn network_type(&self) -> NetworkType {
+        match self {
+            Network::Main => MAIN_NETWORK.network_type(),
+            Network::Test => TEST_NETWORK.network_type(),
+            Network::Regtest(local) => local.network_type(),
+        }
+    }
+
+    fn activation_height(&self, nu: NetworkUpgrade) -> Option<BlockHeight> {
+        match self {
+            Network::Main => MAIN_NETWORK.activation_height(nu),
+            Network::Test => TEST_NETWORK.activation_height(nu),
+            Network::Regtest(local) => local.activation_height(nu),
         }
     }
 }
 
-impl From<consensus::Network> for Network {
-    fn from(value: consensus::Network) -> Self {
+impl From<NetworkType> for Network {
+    fn from(value: NetworkType) -> Self {
         match value {
-            consensus::Network::TestNetwork => Network::Test,
-            consensus::Network::MainNetwork => Network::Main,
+            NetworkType::Main => Network::Main,
+            NetworkType::Test => Network::Test,
+            NetworkType::Regtest => Network::Regtest(regtest_local()),
         }
+    }
+}
+
+/// A regtest network with every upgrade active from height 1 (NU5/Orchard included) — the
+/// zebra/zcashd regtest convention, matching `zecd`'s regtest configuration.
+#[allow(unexpected_cfgs)]
+fn regtest_local() -> LocalNetwork {
+    let h = Some(BlockHeight::from_u32(1));
+    // NU6.1/NU6.2 activate a few blocks in, not at genesis: NU6.1's activation block requires
+    // ZIP-271 lockbox disbursements out of the deferred pool, which only accrues once NU6 is live.
+    // Must match zecd's network::regtest and the regtest harness (its NU6_2_ACTIVATION_HEIGHT) so
+    // the funder commits its transactions to the same consensus branch id.
+    let nu62 = Some(BlockHeight::from_u32(4));
+    LocalNetwork {
+        overwinter: h,
+        sapling: h,
+        blossom: h,
+        heartwood: h,
+        canopy: h,
+        nu5: h,
+        nu6: h,
+        nu6_1: nu62,
+        nu6_2: nu62,
+        #[cfg(zcash_unstable = "nu7")]
+        nu7: nu62,
+        #[cfg(zcash_unstable = "zfuture")]
+        z_future: nu62,
     }
 }
 
@@ -112,4 +160,39 @@ pub(crate) fn init_dbs<P: Parameters + 'static>(
     init_wallet_db(&mut db_data, None)?;
 
     Ok(db_data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn regtest_parses_and_activates_orchard_from_genesis() {
+        let net = Network::parse("regtest").expect("regtest is a known network");
+        assert_eq!(net.name(), "regtest");
+        assert_eq!(net.network_type(), NetworkType::Regtest);
+        // NU5 (Orchard) and the earlier upgrades are active from height 1 (NU6.1/NU6.2 activate a
+        // few blocks in — see regtest_local), matching zecd's regtest configuration.
+        assert_eq!(
+            net.activation_height(NetworkUpgrade::Nu5),
+            Some(BlockHeight::from_u32(1))
+        );
+        assert_eq!(
+            net.activation_height(NetworkUpgrade::Canopy),
+            Some(BlockHeight::from_u32(1))
+        );
+    }
+
+    #[test]
+    fn main_and_test_networks_still_parse() {
+        assert_eq!(
+            Network::parse("main").unwrap().network_type(),
+            NetworkType::Main
+        );
+        assert_eq!(
+            Network::parse("test").unwrap().network_type(),
+            NetworkType::Test
+        );
+        assert!(Network::parse("bogus").is_err());
+    }
 }

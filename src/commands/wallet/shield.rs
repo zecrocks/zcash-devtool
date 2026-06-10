@@ -14,7 +14,7 @@ use zcash_client_backend::{
             create_proposed_transactions, input_selection::GreedyInputSelector, propose_shielding,
             ConfirmationsPolicy, SpendingKeys,
         },
-        Account, WalletRead,
+        Account, TransparentOutputFilter, WalletRead,
     },
     fees::{standard::MultiOutputChangeStrategy, DustOutputPolicy, SplitPolicy, StandardFeeRule},
     proto::service,
@@ -130,6 +130,7 @@ impl Command {
             &from_addrs,
             account.id(),
             confirmations_policy,
+            TransparentOutputFilter::All,
         )
         .map_err(error::Error::Shield)?;
 
@@ -141,6 +142,7 @@ impl Command {
             &SpendingKeys::from_unified_spending_key(usk),
             OvkPolicy::Sender,
             &proposal,
+            None,
         )
         .map_err(error::Error::Shield)?;
 

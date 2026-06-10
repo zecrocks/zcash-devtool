@@ -9,7 +9,7 @@ use zcash_client_backend::{
     data_api::{AccountBirthday, WalletWrite},
     proto::service::{self, compact_tx_streamer_client::CompactTxStreamerClient},
 };
-use zcash_protocol::consensus::{self, BlockHeight, Parameters};
+use zcash_protocol::consensus::{BlockHeight, Parameters};
 
 use crate::{
     config::WalletConfig,
@@ -33,10 +33,16 @@ pub(crate) struct Command {
     #[arg(long)]
     birthday: Option<u32>,
 
-    /// The network the wallet will be used with: \"test\" or \"main\" (default is \"test\")
+    /// The network the wallet will be used with: \"test\", \"main\" or \"regtest\" (default is \"test\")
     #[arg(short, long)]
     #[arg(value_parser = Network::parse)]
     network: Network,
+
+    /// The mnemonic phrase to initialise the wallet with. If omitted, you are prompted
+    /// interactively (press Enter at the prompt to generate a fresh phrase). Provided primarily so
+    /// the wallet can be driven non-interactively, e.g. as the funding wallet in regtest tests.
+    #[arg(long)]
+    mnemonic: Option<String>,
 
     #[command(flatten)]
     connection: ConnectionArgs,
@@ -45,7 +51,7 @@ pub(crate) struct Command {
 impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> Result<(), anyhow::Error> {
         let opts = self;
-        let params = consensus::Network::from(opts.network);
+        let params = opts.network;
 
         let mut client = opts.connection.connect(params, wallet_dir.as_ref()).await?;
 
@@ -84,10 +90,14 @@ impl Command {
             vec![Box::new(recipient) as _]
         };
 
-        // Parse or create the wallet's mnemonic phrase.
-        let phrase = SecretString::new(rpassword::prompt_password(
-            "Enter mnemonic (or just press Enter to generate a new one):",
-        )?);
+        // Parse or create the wallet's mnemonic phrase. A `--mnemonic` argument allows
+        // non-interactive use (e.g. automated regtest funding); otherwise prompt.
+        let phrase = match opts.mnemonic {
+            Some(mnemonic) => SecretString::new(mnemonic),
+            None => SecretString::new(rpassword::prompt_password(
+                "Enter mnemonic (or just press Enter to generate a new one):",
+            )?),
+        };
         let (mnemonic, recover_until) = if !phrase.expose_secret().is_empty() {
             (
                 <Mnemonic<English>>::from_phrase(phrase.expose_secret())?,
@@ -112,7 +122,7 @@ impl Command {
             recipients.iter().map(|r| r.as_ref() as _),
             &mnemonic,
             birthday.height(),
-            opts.network.into(),
+            opts.network,
         )?;
 
         let seed = {

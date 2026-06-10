@@ -4,11 +4,11 @@ use anyhow::anyhow;
 use clap::Args;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 
+use crate::data::Network;
 use tracing::{info, warn};
 use zcash_client_backend::{
     proto::service::compact_tx_streamer_client::CompactTxStreamerClient, tor,
 };
-use zcash_protocol::consensus::Network;
 
 use crate::{data::get_tor_dir, socks::SocksConnector};
 
@@ -44,12 +44,14 @@ pub(crate) enum ServerOperator {
 impl ServerOperator {
     fn servers(&self, network: Network) -> &[Server<'_>] {
         match (self, network) {
-            (ServerOperator::Ecc, Network::MainNetwork) => &[],
-            (ServerOperator::Ecc, Network::TestNetwork) => ECC_TESTNET,
-            (ServerOperator::YWallet, Network::MainNetwork) => YWALLET_MAINNET,
-            (ServerOperator::YWallet, Network::TestNetwork) => &[],
-            (ServerOperator::ZecRocks, Network::MainNetwork) => ZEC_ROCKS_MAINNET,
-            (ServerOperator::ZecRocks, Network::TestNetwork) => ZEC_ROCKS_TESTNET,
+            (ServerOperator::Ecc, Network::Main) => &[],
+            (ServerOperator::Ecc, Network::Test) => ECC_TESTNET,
+            (ServerOperator::YWallet, Network::Main) => YWALLET_MAINNET,
+            (ServerOperator::YWallet, Network::Test) => &[],
+            (ServerOperator::ZecRocks, Network::Main) => ZEC_ROCKS_MAINNET,
+            (ServerOperator::ZecRocks, Network::Test) => ZEC_ROCKS_TESTNET,
+            // Regtest always uses a custom `--server`, so there are no hosted presets.
+            (_, Network::Regtest(_)) => &[],
         }
     }
 }

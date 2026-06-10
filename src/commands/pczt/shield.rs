@@ -13,7 +13,7 @@ use zcash_client_backend::{
             create_pczt_from_proposal, input_selection::GreedyInputSelector, propose_shielding,
             ConfirmationsPolicy,
         },
-        Account as _, WalletRead,
+        Account as _, TransparentOutputFilter, WalletRead,
     },
     fees::{standard::MultiOutputChangeStrategy, DustOutputPolicy, SplitPolicy, StandardFeeRule},
     wallet::OvkPolicy,
@@ -97,6 +97,7 @@ impl Command {
             &from_addrs,
             account.id(),
             confirmations_policy,
+            TransparentOutputFilter::All,
         )
         .map_err(error::Error::Shield)?;
 

@@ -18,9 +18,13 @@ use zcash_client_backend::{
 use zcash_client_sqlite::{util::SystemClock, WalletDb};
 use zcash_keys::encoding::AddressCodec;
 use zcash_primitives::transaction::{Transaction, TxId};
-use zcash_protocol::consensus::{BlockHeight, BranchId, Network};
+use zcash_protocol::consensus::{BlockHeight, BranchId};
 
-use crate::{config::get_wallet_network, data::get_db_paths, remote::ConnectionArgs};
+use crate::{
+    config::get_wallet_network,
+    data::{get_db_paths, Network},
+    remote::ConnectionArgs,
+};
 
 // Options accepted for the `enhance` command
 #[derive(Debug, Args)]

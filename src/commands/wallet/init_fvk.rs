@@ -7,10 +7,15 @@ use zcash_client_backend::{
     proto::service,
 };
 use zcash_keys::{encoding::decode_extfvk_with_network, keys::UnifiedFullViewingKey};
-use zcash_protocol::consensus::{self, NetworkType};
+use zcash_protocol::consensus::NetworkType;
 use zip32::fingerprint::SeedFingerprint;
 
-use crate::{config::WalletConfig, data::init_dbs, parse_hex, remote::ConnectionArgs};
+use crate::{
+    config::WalletConfig,
+    data::{init_dbs, Network},
+    parse_hex,
+    remote::ConnectionArgs,
+};
 
 // Options accepted for the `init-fvk` command
 #[derive(Debug, Args)]
@@ -60,13 +65,7 @@ impl Command {
                 },
             )?;
 
-        let network = match network_type {
-            NetworkType::Main => consensus::Network::MainNetwork,
-            NetworkType::Test => consensus::Network::TestNetwork,
-            NetworkType::Regtest => {
-                return Err(anyhow!("the regtest network is not supported"));
-            }
-        };
+        let network = Network::from(network_type);
 
         let mut client = opts
             .connection

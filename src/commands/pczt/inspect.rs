@@ -363,8 +363,8 @@ impl Command {
         }
 
         match pczt.into_effects() {
-            None => println!("Not enough information to build the transaction's effects"),
-            Some(tx_data) => {
+            Err(e) => println!("Could not build the transaction's effects: {e:?}"),
+            Ok(tx_data) => {
                 println!();
 
                 let txid_parts = tx_data.digest(TxIdDigester);
@@ -396,12 +396,16 @@ impl Command {
                                 &tx_data,
                                 &SignableInput::Transparent(
                                     transparent::sighash::SignableInput::from_parts(
+                                        tx_data
+                                            .transparent_bundle()
+                                            .expect("transparent bundle present"),
                                         hash_type,
                                         index,
                                         &redeem_script.as_ref().unwrap_or(&script_pubkey).into(), // for p2pkh, always the same as script_pubkey
                                         &script_pubkey.into(),
                                         value,
-                                    ),
+                                    )
+                                    .expect("input index is within range"),
                                 ),
                                 &txid_parts,
                             );
