@@ -61,11 +61,13 @@ impl Command {
             )?;
 
         let network = match network_type {
-            NetworkType::Main => consensus::Network::MainNetwork,
-            NetworkType::Test => consensus::Network::TestNetwork,
-            NetworkType::Regtest => {
-                return Err(anyhow!("the regtest network is not supported"));
+            NetworkType::Main => {
+                crate::network::Network::Consensus(consensus::Network::MainNetwork)
             }
+            NetworkType::Test => {
+                crate::network::Network::Consensus(consensus::Network::TestNetwork)
+            }
+            NetworkType::Regtest => crate::network::Network::regtest(),
         };
 
         let mut client = opts

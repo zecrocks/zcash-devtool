@@ -8,9 +8,9 @@ use tracing::{info, warn};
 use zcash_client_backend::{
     proto::service::compact_tx_streamer_client::CompactTxStreamerClient, tor,
 };
-use zcash_protocol::consensus::Network;
+use zcash_protocol::consensus::{NetworkType, Parameters};
 
-use crate::{data::get_tor_dir, socks::SocksConnector};
+use crate::{data::get_tor_dir, network::Network, socks::SocksConnector};
 
 const ECC_TESTNET: &[Server<'_>] = &[Server::fixed("lightwalletd.testnet.electriccoin.co", 9067)];
 
@@ -42,14 +42,16 @@ pub(crate) enum ServerOperator {
 }
 
 impl ServerOperator {
-    fn servers(&self, network: Network) -> &[Server<'_>] {
+    fn servers(&self, network: NetworkType) -> &[Server<'_>] {
         match (self, network) {
-            (ServerOperator::Ecc, Network::MainNetwork) => &[],
-            (ServerOperator::Ecc, Network::TestNetwork) => ECC_TESTNET,
-            (ServerOperator::YWallet, Network::MainNetwork) => YWALLET_MAINNET,
-            (ServerOperator::YWallet, Network::TestNetwork) => &[],
-            (ServerOperator::ZecRocks, Network::MainNetwork) => ZEC_ROCKS_MAINNET,
-            (ServerOperator::ZecRocks, Network::TestNetwork) => ZEC_ROCKS_TESTNET,
+            (ServerOperator::Ecc, NetworkType::Main) => &[],
+            (ServerOperator::Ecc, NetworkType::Test) => ECC_TESTNET,
+            (ServerOperator::YWallet, NetworkType::Main) => YWALLET_MAINNET,
+            (ServerOperator::YWallet, NetworkType::Test) => &[],
+            (ServerOperator::ZecRocks, NetworkType::Main) => ZEC_ROCKS_MAINNET,
+            (ServerOperator::ZecRocks, NetworkType::Test) => ZEC_ROCKS_TESTNET,
+            // There are no hosted servers for regtest; a custom `--server` is required.
+            (_, NetworkType::Regtest) => &[],
         }
     }
 }
@@ -86,7 +88,7 @@ impl Servers {
         // For now just use the first server in the list.
         match self {
             Servers::Hosted(server_operator) => server_operator
-                .servers(network)
+                .servers(network.network_type())
                 .first()
                 .ok_or(anyhow!("{:?} doesn't serve {:?}", server_operator, network)),
             Servers::Custom(servers) => Ok(servers.first().expect("not empty")),

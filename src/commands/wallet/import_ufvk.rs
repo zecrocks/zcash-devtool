@@ -46,12 +46,14 @@ impl Command {
         let ufvk = UnifiedFullViewingKey::parse(&ufvk).map_err(|e| anyhow!("{e}"))?;
 
         let params = match network {
-            consensus::NetworkType::Main => Ok(consensus::Network::MainNetwork),
-            consensus::NetworkType::Test => Ok(consensus::Network::TestNetwork),
-            consensus::NetworkType::Regtest => {
-                Err(anyhow!("UFVK is for regtest, which is unsupported"))
+            consensus::NetworkType::Main => {
+                crate::network::Network::Consensus(consensus::Network::MainNetwork)
             }
-        }?;
+            consensus::NetworkType::Test => {
+                crate::network::Network::Consensus(consensus::Network::TestNetwork)
+            }
+            consensus::NetworkType::Regtest => crate::network::Network::regtest(),
+        };
 
         let (_, db_data) = get_db_paths(wallet_dir.as_ref());
         let mut db_data = WalletDb::for_path(db_data, params, SystemClock, OsRng)?;

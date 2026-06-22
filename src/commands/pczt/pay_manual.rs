@@ -70,7 +70,7 @@ pub(crate) struct Command {
 impl Command {
     pub(crate) async fn run(self, wallet_dir: Option<String>) -> anyhow::Result<()> {
         let params = if let Some(network) = self.network {
-            consensus::Network::from(network)
+            network.params()
         } else {
             let config = WalletConfig::read(wallet_dir.as_ref())?;
             config.network()

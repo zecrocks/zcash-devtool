@@ -22,6 +22,9 @@ pub(crate) enum Network {
     #[default]
     Test,
     Main,
+    /// Regtest / local consensus for the zecd Ironwood harness; NU6.3 (Ironwood)
+    /// is active per the harness activation schedule. See [`crate::network`].
+    Regtest,
 }
 
 impl Network {
@@ -29,6 +32,7 @@ impl Network {
         match name {
             "main" => Ok(Network::Main),
             "test" => Ok(Network::Test),
+            "regtest" => Ok(Network::Regtest),
             other => Err(format!("Unsupported network: {other}")),
         }
     }
@@ -37,24 +41,26 @@ impl Network {
         match self {
             Network::Test => "test",
             Network::Main => "main",
+            Network::Regtest => "regtest",
+        }
+    }
+
+    /// Returns the consensus parameters for this network.
+    pub(crate) fn params(self) -> crate::network::Network {
+        match self {
+            Network::Test => crate::network::Network::Consensus(consensus::Network::TestNetwork),
+            Network::Main => crate::network::Network::Consensus(consensus::Network::MainNetwork),
+            Network::Regtest => crate::network::Network::regtest(),
         }
     }
 }
 
-impl From<Network> for consensus::Network {
-    fn from(value: Network) -> Self {
+impl From<crate::network::Network> for Network {
+    fn from(value: crate::network::Network) -> Self {
         match value {
-            Network::Test => consensus::Network::TestNetwork,
-            Network::Main => consensus::Network::MainNetwork,
-        }
-    }
-}
-
-impl From<consensus::Network> for Network {
-    fn from(value: consensus::Network) -> Self {
-        match value {
-            consensus::Network::TestNetwork => Network::Test,
-            consensus::Network::MainNetwork => Network::Main,
+            crate::network::Network::Consensus(consensus::Network::MainNetwork) => Network::Main,
+            crate::network::Network::Consensus(consensus::Network::TestNetwork) => Network::Test,
+            crate::network::Network::Regtest(_) => Network::Regtest,
         }
     }
 }

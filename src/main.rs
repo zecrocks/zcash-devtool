@@ -16,6 +16,7 @@ mod config;
 mod data;
 mod error;
 mod helpers;
+mod network;
 mod remote;
 mod socks;
 mod ui;
