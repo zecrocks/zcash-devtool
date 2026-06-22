@@ -164,6 +164,9 @@ fn main() -> Result<(), anyhow::Error> {
                 commands::wallet::Command::ListTx(command) => command.run(wallet_dir),
                 commands::wallet::Command::ListUnspent(command) => command.run(wallet_dir),
                 commands::wallet::Command::Shield(command) => command.run(wallet_dir).await,
+                commands::wallet::Command::MigrateToIronwood(command) => {
+                    command.run(wallet_dir).await
+                }
                 commands::wallet::Command::Propose(command) => command.run(wallet_dir).await,
                 commands::wallet::Command::Pay(command) => command.run(wallet_dir).await,
                 commands::wallet::Command::Send(command) => command.run(wallet_dir).await,

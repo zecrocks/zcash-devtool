@@ -683,6 +683,11 @@ async fn refresh_utxos<P: Parameters>(
                         Script(script::Code(reply.script)),
                     ),
                     Some(BlockHeight::from(u32::try_from(reply.height)?)),
+                    // recipient_account / recipient_key_scope / funding_account
+                    // are not known from a lightwalletd UTXO reply.
+                    None,
+                    None,
+                    None,
                 )
                 .ok_or(anyhow!(
                     "Received UTXO that doesn't correspond to a valid P2PKH or P2SH address"

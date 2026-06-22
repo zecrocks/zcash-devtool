@@ -156,6 +156,7 @@ impl Command {
                 zcash_primitives::transaction::builder::BuildConfig::Standard {
                     sapling_anchor,
                     orchard_anchor,
+                    ironwood_anchor: None,
                 },
             );
             add_inputs(&mut builder, transparent_inputs)?;

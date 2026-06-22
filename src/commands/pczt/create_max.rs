@@ -79,6 +79,8 @@ impl Command {
             memo,
             mode,
             ConfirmationsPolicy::default(),
+            // proposed_version: let the proposal pick the transaction version.
+            None,
         )
         .map_err(error::Error::SendMax)?;
 

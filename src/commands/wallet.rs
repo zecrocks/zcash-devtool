@@ -14,6 +14,7 @@ pub(crate) mod list_accounts;
 pub(crate) mod list_addresses;
 pub(crate) mod list_tx;
 pub(crate) mod list_unspent;
+pub(crate) mod migrate;
 pub(crate) mod pay;
 pub(crate) mod propose;
 pub(crate) mod reset;
@@ -78,6 +79,9 @@ pub(crate) enum Command {
 
     /// Shield transparent funds received by the wallet
     Shield(shield::Command),
+
+    /// Migrate Orchard funds to Ironwood (creates a V6/Ironwood transaction)
+    MigrateToIronwood(migrate::Command),
 
     /// Propose a transfer of funds to the given address and display the proposal
     Propose(propose::Command),

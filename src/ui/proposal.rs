@@ -77,7 +77,10 @@ fn print_payments(request: &TransactionRequest, payment_pools: &BTreeMap<usize, 
     }
 }
 
-fn print_transparent_inputs<P: Parameters>(inputs: &[WalletTransparentOutput], params: &P) {
+fn print_transparent_inputs<P: Parameters, AccountId>(
+    inputs: &[WalletTransparentOutput<AccountId>],
+    params: &P,
+) {
     if inputs.is_empty() {
         return;
     }

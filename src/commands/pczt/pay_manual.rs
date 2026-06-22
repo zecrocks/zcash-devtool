@@ -220,11 +220,9 @@ impl Command {
                     &[][..] as &[Infallible],
                     &sapling_output_values[..],
                 ),
-                &(
-                    orchard::builder::BundleType::DEFAULT,
-                    &[][..] as &[Infallible],
-                    &orchard_output_values[..],
-                ),
+                // The Orchard `BundleView` is now a 2-tuple of (inputs, outputs);
+                // the bundle type element was removed in the Ironwood fork.
+                &(&[][..] as &[Infallible], &orchard_output_values[..]),
                 None,
                 &(),
             )
@@ -238,6 +236,7 @@ impl Command {
             zcash_primitives::transaction::builder::BuildConfig::Standard {
                 sapling_anchor,
                 orchard_anchor,
+                ironwood_anchor: None,
             },
         );
         add_inputs(&mut builder, transparent_inputs)?;
@@ -276,6 +275,8 @@ impl Command {
             pczt_parts,
             sapling_meta,
             orchard_meta,
+            // This manual-pay path does not construct Ironwood outputs.
+            ironwood_meta: _,
         } = builder.build_for_pczt(rng, &zip317::FeeRule::standard())?;
         let created = Creator::build_from_parts(pczt_parts)
             .ok_or_else(|| anyhow!("Transaction version is incompatible with PCZTs"))?;

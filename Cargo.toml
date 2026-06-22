@@ -112,3 +112,32 @@ tui = [
     "dep:tokio-util",
     "dep:tui-logger",
 ]
+
+# Ironwood (NU7 / Zcash Ironwood upgrade) dependency repointing.
+#
+# The published librustzcash crates cannot create or parse V6/Ironwood
+# transactions, so we redirect every librustzcash crate this tool depends on
+# (directly or transitively) to the Valar Group `ironwood-integration` fork.
+# Because the fork keeps the same crate versions as crates.io, these are
+# semver-compatible source replacements and override transitive uses too.
+#
+# `orchard` must be patched to the exact git revision the fork itself uses
+# (pulled by the fork via git, not crates.io); patching it here unifies our
+# direct `orchard` dependency with the fork's so there is a single `orchard`
+# in the graph.
+#
+# NOTE: building against this patch requires the Ironwood feature gate; see
+# `.cargo/config.toml`, which sets `--cfg zcash_unstable="nu6.3"`.
+[patch.crates-io]
+orchard = { git = "https://github.com/zcash/orchard", rev = "0eaea4ebb5aa4ba2b6cf4afa0e1c9b5e8c03273a" }
+zcash_address = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_encoding = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_protocol = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zip321 = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+pczt = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_keys = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_client_backend = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_client_sqlite = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_primitives = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_proofs = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }
+zcash_transparent = { git = "https://github.com/valargroup/librustzcash", rev = "5df7f06486c7c1cab317a069809b7147857e37ee" }

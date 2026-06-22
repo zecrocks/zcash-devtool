@@ -9,7 +9,6 @@ use zcash_client_sqlite::{
 };
 use zcash_keys::keys::DerivationError;
 use zcash_primitives::transaction::fees::zip317;
-use zcash_protocol::value::BalanceError;
 use zip321::Zip321Error;
 
 pub(crate) type WalletErrorT = WalletError<
@@ -24,7 +23,7 @@ pub(crate) type WalletErrorT = WalletError<
 pub(crate) type SendMaxErrorT = WalletError<
     SqliteClientError,
     commitment_tree::Error,
-    BalanceError,
+    GreedyInputSelectorError,
     zip317::FeeError,
     zip317::FeeError,
     ReceivedNoteId,
@@ -39,6 +38,19 @@ pub(crate) type ShieldErrorT = WalletError<
     Infallible,
 >;
 
+// Matches `zcash_client_backend::data_api::wallet::MigrateToIronwoodErrT` for
+// `DbT = WalletDb<..>` and `FeeRuleT = StandardFeeRule` (whose `FeeRule::Error`
+// is `zip317::FeeError`). The migration helper performs no input selection or
+// change derivation, so both of those error slots are `Infallible`.
+pub(crate) type MigrateErrorT = WalletError<
+    SqliteClientError,
+    commitment_tree::Error,
+    Infallible,
+    zip317::FeeError,
+    Infallible,
+    ReceivedNoteId,
+>;
+
 #[derive(Debug)]
 pub enum Error {
     Cache(FsBlockDbError),
@@ -48,6 +60,7 @@ pub enum Error {
     InvalidMemo,
     InvalidKeysFile,
     InvalidTreeState,
+    Migrate(MigrateErrorT),
     SendFailed { code: i32, reason: String },
     SendMax(SendMaxErrorT),
     Shield(ShieldErrorT),
@@ -65,6 +78,7 @@ impl fmt::Display for Error {
             Error::InvalidMemo => write!(f, "Invalid memo"),
             Error::InvalidKeysFile => write!(f, "Invalid keys file"),
             Error::InvalidTreeState => write!(f, "Invalid TreeState received from server"),
+            Error::Migrate(e) => e.fmt(f),
             Error::SendFailed { code, reason } => write!(f, "Send failed: ({code}) {reason}"),
             Error::SendMax(e) => e.fmt(f),
             Error::Shield(e) => e.fmt(f),

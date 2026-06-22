@@ -41,7 +41,9 @@ impl Command {
             &mut db_data,
             pczt,
             Some((&spend_vk, &output_vk)),
-            Some(&orchard::circuit::VerifyingKey::build()),
+            Some(&orchard::circuit::VerifyingKey::build(
+                orchard::circuit::OrchardCircuitVersion::PostNu6_3,
+            )),
         )
         .map_err(|e| anyhow!("Failed to extract and store transaction from PCZT: {:?}", e))?;
 

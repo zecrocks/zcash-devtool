@@ -172,9 +172,26 @@ impl Command {
 
         let prover = LocalTxProver::bundled();
 
-        let pczt = Prover::new(pczt)
-            .create_orchard_proof(&orchard::circuit::ProvingKey::build())
-            .map_err(|e| anyhow!("Failed to create Orchard proof: {:?}", e))?
+        // Ironwood (V6) bundles share the post-NU6.3 Orchard circuit, so a single
+        // proving key built for that circuit version serves both the Orchard and
+        // Ironwood proof steps.
+        let orchard_pk = orchard::circuit::ProvingKey::build(
+            orchard::circuit::OrchardCircuitVersion::PostNu6_3,
+        );
+
+        let mut orchard_prover = Prover::new(pczt);
+        if orchard_prover.requires_orchard_proof() {
+            orchard_prover = orchard_prover
+                .create_orchard_proof(&orchard_pk)
+                .map_err(|e| anyhow!("Failed to create Orchard proof: {:?}", e))?;
+        }
+        if orchard_prover.requires_ironwood_proof() {
+            orchard_prover = orchard_prover
+                .create_ironwood_proof(&orchard_pk)
+                .map_err(|e| anyhow!("Failed to create Ironwood proof: {:?}", e))?;
+        }
+
+        let pczt = orchard_prover
             .create_sapling_proofs(&prover, &prover)
             .map_err(|e| anyhow!("Failed to create Sapling proofs: {:?}", e))?
             .finish();
