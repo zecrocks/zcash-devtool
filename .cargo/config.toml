@@ -1,0 +1,8 @@
+# The Valar Group librustzcash fork gates all Ironwood (NU7 / V6 transaction)
+# functionality behind `cfg(zcash_unstable = "nu6.3")`. Set it for every build
+# (including dependencies) so the Ironwood code paths — notably
+# `create_orchard_to_ironwood_transaction`, used by `wallet migrate-to-ironwood`
+# — are compiled in. The fork registers this cfg via `check-cfg`, so it does not
+# produce "unexpected cfg" warnings.
+[build]
+rustflags = ["--cfg", "zcash_unstable=\"nu6.3\""]

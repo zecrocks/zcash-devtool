@@ -33,6 +33,15 @@ pub(crate) struct Command {
     #[arg(long)]
     birthday: Option<u32>,
 
+    /// The mnemonic phrase to initialise the wallet with.
+    ///
+    /// If omitted, the phrase is read interactively (press Enter at the prompt to
+    /// generate a fresh one). Pass this to run non-interactively, e.g. from a test
+    /// harness. NOTE: a mnemonic passed on the command line is visible in the
+    /// process list; this is intended for ephemeral test wallets.
+    #[arg(long)]
+    mnemonic: Option<String>,
+
     /// The network the wallet will be used with: \"test\", \"main\", or \"regtest\" (default is \"test\").
     /// Use \"regtest\" for an Ironwood/NU6.3 chain (and pass an explicit --server).
     #[arg(short, long)]
@@ -85,17 +94,26 @@ impl Command {
             vec![Box::new(recipient) as _]
         };
 
-        // Parse or create the wallet's mnemonic phrase.
-        let phrase = SecretString::new(rpassword::prompt_password(
-            "Enter mnemonic (or just press Enter to generate a new one):",
-        )?);
-        let (mnemonic, recover_until) = if !phrase.expose_secret().is_empty() {
+        // Parse or create the wallet's mnemonic phrase. A phrase supplied via
+        // `--mnemonic` is used directly (non-interactive); otherwise we prompt,
+        // treating an empty response as a request to generate a fresh phrase.
+        let (mnemonic, recover_until) = if let Some(phrase) = &opts.mnemonic {
             (
-                <Mnemonic<English>>::from_phrase(phrase.expose_secret())?,
+                <Mnemonic<English>>::from_phrase(phrase.trim())?,
                 Some(chain_tip.into()),
             )
         } else {
-            (Mnemonic::generate(Count::Words24), None)
+            let phrase = SecretString::new(rpassword::prompt_password(
+                "Enter mnemonic (or just press Enter to generate a new one):",
+            )?);
+            if !phrase.expose_secret().is_empty() {
+                (
+                    <Mnemonic<English>>::from_phrase(phrase.expose_secret())?,
+                    Some(chain_tip.into()),
+                )
+            } else {
+                (Mnemonic::generate(Count::Words24), None)
+            }
         };
 
         let birthday = Self::get_wallet_birthday(
